@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>全景视频</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        background-color: #666565;
+      }
+      .big-container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 90vw;
+        height: 80vh;
+      }
+      .screen-container {
+        width: 100%;
+        height: 100%;
+      }
+      .video-container {
+        width: 100%;
+        height: 100%;
+      }
+      .video-mask {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+      }
+      .video-mask img {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 10%;
+      }
+      .video-bar {
+        position: absolute;
+        z-index: 10;
+        bottom: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0em 1em;
+        box-sizing: border-box;
+        width: 100%;
+        background-image: linear-gradient(to top, black, rgba(0, 0, 0, 0));
+      }
+      .video-btn {
+        flex: 0 0 22px;
+        padding: 0.8em;
+      }
+      .progress-container {
+        position: relative;
+        flex: 1;
+        padding: 0.8em;
+        color: #ffffff;
+        font-size: 14px;
+      }
+      .time-box {
+        width: 80px;
+        display: inline-block;
+      }
+      .progress-container .progress-wrapper {
+        display: inline-block;
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: calc(100% - 120px);
+        height: 0.2em;
+        border-radius: 30px;
+        background-color: rgba(150, 150, 150, 1);
+        cursor: pointer;
+      }
+      .progress-wrapper .progress {
+        position: absolute;
+        width: 0%;
+        height: 100%;
+        background-color: rgb(22, 175, 236);
+        transition: width 0.5s;
+      }
+      .progress::after {
+        content: "";
+        display: block;
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1em;
+        height: 1em;
+        border-radius: 50%;
+        background-color: #ffffff;
+        cursor: pointer;
+      }
+      .full-screen {
+        flex: 0 0 22px;
+        padding: 0.8em;
+      }
+      .btn-hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="big-container">
+      <div class="screen-container" id="screenContainer">
+        <div class="video-container" id="videoContainer"></div>
+        <div class="video-mask">
+          <img
+            src="./resources/play.png"
+            onClick="toggleVideo()"
+            alt="play.png"
+          />
+        </div>
+        <div class="video-bar">
+          <div class="video-btn" onclick="toggleVideo()">
+            <img
+              src="./resources/pause.png"
+              class="btn-hidden"
+              alt="pause.png"
+              width="68%"
+            />
+            <img src="./resources/play.png" alt="pause.png" width="68%" />
+          </div>
+          <div class="progress-container">
+            <div class="time-box">
+              <span class="current-video-time">00:00</span>/<span class="total-video-time">00:00</span>
+            </div>
+            <div class="progress-wrapper">
+              <div class="progress" id="progress-play"></div>
+            </div>
+          </div>
+          <div class="full-screen" onclick="toggleBigScreen()">
+            <img
+              src="./resources/bigscreen.png"
+              alt="bigscreen.png"
+              width="68%"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./js/three.min.js"></script>
+    <script src="./js/OrbitControls.js"></script>
+    <script>
+      var scene = null;
+      var camera = null;
+      var renderer = null;
+      var controls = null;
+      var video = null;
+      var mesh = null;
+      var player = null;
+      var playVariables = {
+        playClick: true,
+        isBigScreen: false,
+      };
+
+      var videoContainer = document.getElementById("videoContainer");
+
+      initScene();
+      initCamera(videoContainer);
+      initRenderer(videoContainer);
+      initVideo();
+      initContent();
+      initControls(videoContainer);
+      render();
+
+      function initScene() {
+        scene = new THREE.Scene();
+      }
+
+      function initCamera(element) {
+        camera = new THREE.PerspectiveCamera(
+          75,
+          element.clientWidth / element.clientHeight,
+          1,
+          1100
+        );
+        camera.position.set(1, 0, 0);
+      }
+
+      function initRenderer(element) {
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(element.offsetWidth, element.offsetHeight);
+        element.appendChild(renderer.domElement);
+      }
+
+      function initVideo() {
+        video = document.createElement("video");
+        video.preload = "auto";
+        video.crossOrigin = "anonymous";
+        video.src = "./resources/video.mp4";
+        player = video;
+
+        video.ontimeupdate = function (event) {
+          var totalTime = s_to_hs(Math.floor(this.duration));
+          document.getElementsByClassName("total-video-time")[0].innerHTML =
+            totalTime;
+
+          var currentTime = s_to_hs(Math.floor(this.currentTime));
+          document.getElementsByClassName("current-video-time")[0].innerHTML =
+            currentTime;
+
+          document.getElementById("progress-play").style.width = `${
+            (Math.floor(this.currentTime) / Math.floor(this.duration)) * 100
+          }%`;
+
+          if (currentTime === totalTime) {
+            video.currentTime = 0;
+            toggleVideo();
+            document.getElementsByClassName("video-mask")[0].style.display =
+              "block";
+          }
+        };
+      }
+
+      function initContent() {
+        var geometry = new THREE.SphereBufferGeometry(300, 90, 90);
+        geometry.scale(-1, 1, 1);
+        var texture = new THREE.VideoTexture(video);
+        texture.minFilter = THREE.LinearFilter;
+        texture.format = THREE.RGBFormat;
+        var material = new THREE.MeshBasicMaterial({
+          map: texture,
+        });
+        mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(0, 0, 0);
+        scene.add(mesh);
+      }
+
+      function initControls(element) {
+        controls = new THREE.OrbitControls(camera, element);
+        controls.rotateSpeed = 0.05;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+      }
+
+      function render() {
+        requestAnimationFrame(render);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      function toggleVideo() {
+        var imgArr = document.getElementsByClassName("video-btn")[0].children;
+        if (playVariables.playClick) {
+          imgArr[1].setAttribute("class", "btn-hidden");
+          imgArr[0].setAttribute("class", "");
+          document.getElementsByClassName("video-mask")[0].style.display =
+            "none";
+          playVariables.playClick = false;
+          player.play();
+        } else {
+          imgArr[0].setAttribute("class", "btn-hidden");
+          imgArr[1].setAttribute("class", "");
+          playVariables.playClick = true;
+          player.pause();
+        }
+      }
+
+      function toggleBigScreen() {
+        if (playVariables.isBigScreen) {
+          exitFullscreen();
+        } else {
+          requestFullScreen();
+        }
+      }
+
+      function requestFullScreen() {
+        var de = document.getElementById("screenContainer");
+        if (de.requestFullscreen) {
+          de.requestFullscreen();
+        } else if (de.mozRequestFullScreen) {
+          de.mozRequestFullScreen();
+        } else if (de.webkitRequestFullScreen) {
+          de.webkitRequestFullScreen();
+        }
+        playVariables.isBigScreen = true;
+      }
+
+      function exitFullscreen() {
+        var de = document;
+        if (de.exitFullscreen) {
+          de.exitFullscreen();
+        } else if (de.mozCancelFullScreen) {
+          de.mozCancelFullScreen();
+        } else if (de.webkitCancelFullScreen) {
+          de.webkitCancelFullScreen();
+        }
+        playVariables.isBigScreen = false;
+      }
+
+      function s_to_hs(s) {
+        var h;
+        h = Math.floor(s / 60);
+        s = s % 60;
+        h += "";
+        s += "";
+        h = h.length == 1 ? "0" + h : h;
+        s = s.length == 1 ? "0" + s : s;
+        return h + ":" + s;
+      }
+
+      var progressContainer =
+        document.getElementsByClassName("progress-wrapper")[0];
+      progressContainer.addEventListener("click", function (event) {
+        var progressWidth =
+          document.getElementById("screenContainer").offsetWidth - 248;
+        var percentage = event.offsetX / progressWidth;
+        video.currentTime = video.duration * percentage;
+      });
+
+      window.addEventListener(
+        "resize",
+        function () {
+          camera.aspect =
+            videoContainer.clientWidth / videoContainer.clientHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(
+            videoContainer.offsetWidth,
+            videoContainer.offsetHeight
+          );
+        },
+        false
+      );
+    </script>
+  </body>
+</html>
